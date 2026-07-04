@@ -8,7 +8,7 @@ function clean(value) {
   return String(value ?? '').replace(/^\uFEFF/, '').trim();
 }
 
-function wineFromSupabase(row) {
+function wineFromDatabase(row) {
   const vintage = clean(row.vintage);
   const producer = clean(row.producer);
   const wineName = clean(row.wine_name);
@@ -52,17 +52,17 @@ function App() {
     const { data, error } = await supabase
       .from('wines')
       .select('*')
-      .order('vintage', { ascending: false });
+      .order('wine_name', { ascending: true });
 
     if (error) {
-      console.error(error);
+      console.error('Supabase load error:', error);
       setLoadError('Unable to connect to the cellar database.');
       setWines([]);
       setLoading(false);
       return;
     }
 
-    setWines((data || []).map(wineFromSupabase));
+    setWines((data || []).map(wineFromDatabase));
     setLoading(false);
   }
 
@@ -83,15 +83,11 @@ function App() {
     const currentWine = wines.find(wine => wine.id === id);
     if (!currentWine) return;
 
-    const nextQuantity = Math.max(0, currentWine.quantity + delta);
+    const previousQuantity = currentWine.quantity;
+    const nextQuantity = Math.max(0, previousQuantity + delta);
 
-    setWines(current =>
-      current.map(wine => wine.id === id ? { ...wine, quantity: nextQuantity } : wine)
-    );
-
-    setSelected(current =>
-      current?.id === id ? { ...current, quantity: nextQuantity } : current
-    );
+    setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: nextQuantity } : wine));
+    setSelected(current => current?.id === id ? { ...current, quantity: nextQuantity } : current);
 
     const { error } = await supabase
       .from('wines')
@@ -99,8 +95,10 @@ function App() {
       .eq('id', id);
 
     if (error) {
-      console.error(error);
-      setLoadError('The bottle count changed on screen but could not be saved to Supabase. Refresh to check the database.');
+      console.error('Supabase quantity update error:', error);
+      setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: previousQuantity } : wine));
+      setSelected(current => current?.id === id ? { ...current, quantity: previousQuantity } : current);
+      setLoadError('The bottle count could not be saved. Please try again.');
     }
   }
 
@@ -122,7 +120,7 @@ function App() {
         <section className="error">
           <AlertCircle />
           <div>
-            <strong>Database connection issue</strong>
+            <strong>Database issue</strong>
             <p>{loadError}</p>
             <button onClick={loadWines}><RefreshCw /> Try again</button>
           </div>
@@ -145,15 +143,11 @@ function App() {
         <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search producer, vintage, region…" />
       </label>
 
-      {loading ? (
-        <section className="list">
-          <div className="card"><div><strong>Loading wines…</strong><small>Reading from Supabase</small></div></div>
-        </section>
-      ) : (
-        <section className="list">
-          {filtered.map(wine => <WineCard key={wine.id} wine={wine} onClick={() => setSelected(wine)} />)}
-        </section>
-      )}
+      <section className="list">
+        {loading && <div className="card"><div><strong>Loading wines…</strong><small>Reading from Supabase</small></div></div>}
+        {!loading && filtered.length === 0 && <div className="card"><div><strong>No wines found</strong><small>Try a different search</small></div></div>}
+        {!loading && filtered.map(wine => <WineCard key={wine.id} wine={wine} onClick={() => setSelected(wine)} />)}
+      </section>
     </main>
   );
 }
