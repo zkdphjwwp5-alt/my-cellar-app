@@ -37,6 +37,17 @@ function wineFromDatabase(row) {
   };
 }
 
+function bestMatch(wines, extracted) {
+  const terms = [extracted.vintage, extracted.producer, extracted.wine_name].map(clean).filter(Boolean);
+  if (!terms.length) return null;
+  const scored = wines.map(wine => {
+    const haystack = Object.values(wine).join(' ').toLowerCase();
+    const score = terms.reduce((sum, term) => sum + (haystack.includes(term.toLowerCase()) ? 1 : 0), 0);
+    return { wine, score };
+  }).sort((a, b) => b.score - a.score);
+  return scored[0]?.score >= 2 ? scored[0].wine : null;
+}
+
 function App() {
   const [wines, setWines] = useState([]);
   const [query, setQuery] = useState('');
@@ -92,12 +103,20 @@ function App() {
     setSelected(current => current?.id === id ? { ...current, photoUrl } : current);
   }
 
-  async function createWineFromScan({ wineName, vintage }) {
-    const { data, error } = await supabase.from('wines').insert({ wine_name: wineName || 'New wine', vintage: vintage || '', quantity: 1 }).select('*').single();
+  async function createWineFromScan({ producer, wineName, vintage, photoUrl }) {
+    const { data, error } = await supabase.from('wines').insert({
+      producer: producer || '',
+      wine_name: wineName || 'New wine',
+      vintage: vintage || '',
+      quantity: 1,
+      photo_url: photoUrl || null
+    }).select('*').single();
+
     if (error) {
       setLoadError('The new wine could not be saved.');
       return null;
     }
+
     const newWine = wineFromDatabase(data);
     setWines(current => [newWine, ...current]);
     setSelected(newWine);
@@ -173,9 +192,13 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
 function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
   const fileInputRef = useRef(null);
   const [photoUrl, setPhotoUrl] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [newWineName, setNewWineName] = useState('');
+  const [newProducer, setNewProducer] = useState('');
   const [newVintage, setNewVintage] = useState('');
+  const [recognising, setRecognising] = useState(false);
+  const [recognitionMessage, setRecognitionMessage] = useState('');
 
   useEffect(() => {
     setTimeout(() => fileInputRef.current?.click(), 250);
@@ -183,10 +206,50 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
 
   const matches = wines.filter(wine => searchText && Object.values(wine).join(' ').toLowerCase().includes(searchText.toLowerCase())).slice(0, 10);
 
-  function handleLocalPhoto(event) {
+  async function handleLocalPhoto(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    setPhotoFile(file);
     setPhotoUrl(URL.createObjectURL(file));
+    await recogniseLabel(file);
+  }
+
+  async function recogniseLabel(file) {
+    setRecognising(true);
+    setRecognitionMessage('Reading label…');
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64Image = String(reader.result || '');
+      const { data, error } = await supabase.functions.invoke('analyze-wine-label', {
+        body: { image: base64Image }
+      });
+
+      if (error || !data) {
+        setRecognitionMessage('Could not read the label yet. You can search or add manually.');
+        setRecognising(false);
+        return;
+      }
+
+      const extracted = data;
+      setNewProducer(clean(extracted.producer));
+      setNewWineName(clean(extracted.wine_name));
+      setNewVintage(clean(extracted.vintage));
+      const combined = [extracted.vintage, extracted.producer, extracted.wine_name].map(clean).filter(Boolean).join(' ');
+      setSearchText(combined);
+
+      const match = bestMatch(wines, extracted);
+      if (match) {
+        setRecognitionMessage('Match found. Opening wine…');
+        setTimeout(() => onOpen(match), 500);
+      } else {
+        setRecognitionMessage('No clear match found. Details have been pre-filled.');
+      }
+
+      setRecognising(false);
+    };
+
+    reader.readAsDataURL(file);
   }
 
   return (
@@ -195,17 +258,21 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
       <section className="detail">
         <Camera size={44} />
         <h1>Scan Bottle</h1>
-        <p>The camera should open automatically. Take a photo, then match or add the wine.</p>
+        <p>Take a photo. The app will try to recognise the wine automatically.</p>
         <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleLocalPhoto} style={{ display: 'none' }} />
         <button className="photo-button" onClick={() => fileInputRef.current?.click()}><Camera /> Take Photo</button>
         {photoUrl && <img className="wine-photo" src={photoUrl} alt="Bottle preview" />}
+        {recognitionMessage && <p className="photo-message">{recognising ? '⏳ ' : ''}{recognitionMessage}</p>}
+
         <h2>Find existing wine</h2>
         <input className="biginput" value={searchText} onChange={event => setSearchText(event.target.value)} placeholder="Try: Meerlust Rubicon 2021" />
         {matches.map(wine => <WineCard key={wine.id} wine={wine} onClick={() => onOpen(wine)} />)}
+
         <h2>Add new wine</h2>
         <input className="biginput" value={newVintage} onChange={event => setNewVintage(event.target.value)} placeholder="Vintage e.g. 2021 or NV" />
+        <input className="biginput" value={newProducer} onChange={event => setNewProducer(event.target.value)} placeholder="Producer" />
         <input className="biginput" value={newWineName} onChange={event => setNewWineName(event.target.value)} placeholder="Wine name" />
-        <button onClick={() => onCreateWine({ wineName: newWineName, vintage: newVintage })}><Plus /> Create new wine</button>
+        <button onClick={() => onCreateWine({ producer: newProducer, wineName: newWineName, vintage: newVintage })}><Plus /> Create new wine</button>
       </section>
     </main>
   );
