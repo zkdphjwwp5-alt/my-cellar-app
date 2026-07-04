@@ -1,17 +1,7 @@
-# My Cellar v0.3 — Bottle Photo Upload
+# My Cellar v0.4.1 — Auto Camera Launch
 
-## Files changed
-- App.jsx
-- PhotoUploader.jsx
-- style.css
+Replace App.jsx only.
 
-## Supabase setup
-Run `supabase-storage-setup.sql` in Supabase SQL Editor before testing photo uploads.
-
-## Acceptance test
-- Open a wine detail page
-- Tap Upload photo
-- Take/select a bottle photo
-- Photo uploads to Supabase Storage
-- `wines.photo_url` updates
-- Photo appears immediately on the detail page
+Result:
+- Tapping Scan Bottle opens the phone camera/file picker automatically.
+- A large Take Photo button remains as fallback.

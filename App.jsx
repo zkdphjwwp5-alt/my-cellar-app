@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Camera, Search, Wine, Plus, Minus, ChevronLeft, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from './supabase.js';
@@ -14,7 +14,6 @@ function wineFromDatabase(row) {
   const producer = clean(row.producer);
   const wineName = clean(row.wine_name);
   const fullName = [producer, wineName].filter(Boolean).join(' ') || wineName || 'Unnamed wine';
-
   return {
     id: row.id,
     quantity: Number(row.quantity) || 0,
@@ -49,26 +48,18 @@ function App() {
   async function loadWines() {
     setLoading(true);
     setLoadError('');
-
-    const { data, error } = await supabase
-      .from('wines')
-      .select('*')
-      .order('wine_name', { ascending: true });
-
+    const { data, error } = await supabase.from('wines').select('*').order('wine_name', { ascending: true });
     if (error) {
       setLoadError('Unable to connect to the cellar database.');
       setWines([]);
       setLoading(false);
       return;
     }
-
     setWines((data || []).map(wineFromDatabase));
     setLoading(false);
   }
 
-  useEffect(() => {
-    loadWines();
-  }, []);
+  useEffect(() => { loadWines(); }, []);
 
   const totalBottles = wines.reduce((sum, wine) => sum + wine.quantity, 0);
   const countries = new Set(wines.map(w => w.country).filter(Boolean)).size;
@@ -82,18 +73,13 @@ function App() {
   async function changeQuantity(id, delta) {
     const currentWine = wines.find(wine => wine.id === id);
     if (!currentWine) return;
-
     const previousQuantity = currentWine.quantity;
     const nextQuantity = Math.max(0, previousQuantity + delta);
 
     setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: nextQuantity } : wine));
     setSelected(current => current?.id === id ? { ...current, quantity: nextQuantity } : current);
 
-    const { error } = await supabase
-      .from('wines')
-      .update({ quantity: nextQuantity, updated_at: new Date().toISOString() })
-      .eq('id', id);
-
+    const { error } = await supabase.from('wines').update({ quantity: nextQuantity, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) {
       setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: previousQuantity } : wine));
       setSelected(current => current?.id === id ? { ...current, quantity: previousQuantity } : current);
@@ -106,23 +92,12 @@ function App() {
     setSelected(current => current?.id === id ? { ...current, photoUrl } : current);
   }
 
-  async function createWineFromScan({ wineName, vintage, photoUrl }) {
-    const { data, error } = await supabase
-      .from('wines')
-      .insert({
-        wine_name: wineName || 'New wine',
-        vintage: vintage || '',
-        quantity: 1,
-        photo_url: photoUrl || null
-      })
-      .select('*')
-      .single();
-
+  async function createWineFromScan({ wineName, vintage }) {
+    const { data, error } = await supabase.from('wines').insert({ wine_name: wineName || 'New wine', vintage: vintage || '', quantity: 1 }).select('*').single();
     if (error) {
       setLoadError('The new wine could not be saved.');
       return null;
     }
-
     const newWine = wineFromDatabase(data);
     setWines(current => [newWine, ...current]);
     setSelected(newWine);
@@ -144,16 +119,7 @@ function App() {
         <Wine size={50} />
       </header>
 
-      {loadError && (
-        <section className="error">
-          <AlertCircle />
-          <div>
-            <strong>Database issue</strong>
-            <p>{loadError}</p>
-            <button onClick={loadWines}><RefreshCw /> Try again</button>
-          </div>
-        </section>
-      )}
+      {loadError && <section className="error"><AlertCircle /><div><strong>Database issue</strong><p>{loadError}</p><button onClick={loadWines}><RefreshCw /> Try again</button></div></section>}
 
       <section className="stats">
         <div><strong>{wines.length}</strong><span>wines</span></div>
@@ -162,14 +128,11 @@ function App() {
       </section>
 
       <section className="actions">
-        <button onClick={() => setScan(true)}><Camera /> Photo / scan bottle</button>
-        <button onClick={() => setScan(true)}><Plus /> Add from photo</button>
+        <button onClick={() => setScan(true)}><Camera /> Scan Bottle</button>
+        <button onClick={() => setScan(true)}><Plus /> Add from Photo</button>
       </section>
 
-      <label className="search">
-        <Search />
-        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search producer, vintage, region…" />
-      </label>
+      <label className="search"><Search /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search producer, vintage, region…" /></label>
 
       <section className="list">
         {loading && <div className="card"><div><strong>Loading wines…</strong><small>Reading from Supabase</small></div></div>}
@@ -181,16 +144,7 @@ function App() {
 }
 
 function WineCard({ wine, onClick }) {
-  return (
-    <button className="card" onClick={onClick}>
-      <div>
-        <strong>{[wine.vintage, wine.producer || wine.fullName].filter(Boolean).join(' ')}</strong>
-        <span>{wine.producer ? wine.name : ''}</span>
-        <small>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</small>
-      </div>
-      <b>{wine.quantity}</b>
-    </button>
-  );
+  return <button className="card" onClick={onClick}><div><strong>{[wine.vintage, wine.producer || wine.fullName].filter(Boolean).join(' ')}</strong><span>{wine.producer ? wine.name : ''}</span><small>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</small></div><b>{wine.quantity}</b></button>;
 }
 
 function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
@@ -202,14 +156,9 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
         <h1>{[wine.vintage, wine.producer || wine.fullName].filter(Boolean).join(' ')}</h1>
         {wine.producer && <h2>{wine.name}</h2>}
         <p>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</p>
-
         <PhotoUploader wine={wine} onPhotoSaved={onPhotoSaved} />
-
         <div className="qty">{wine.quantity}<span>bottles</span></div>
-        <div className="actions">
-          <button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Consume one</button>
-          <button onClick={() => onChangeQuantity(wine.id, 1)}><Plus /> Add one</button>
-        </div>
+        <div className="actions"><button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Consume one</button><button onClick={() => onChangeQuantity(wine.id, 1)}><Plus /> Add one</button></div>
         <dl>
           <dt>Bottle size</dt><dd>{wine.size}</dd>
           <dt>Cellar location</dt><dd>{wine.storageLocation}</dd>
@@ -222,14 +171,17 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
 }
 
 function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
+  const fileInputRef = useRef(null);
   const [photoUrl, setPhotoUrl] = useState('');
   const [searchText, setSearchText] = useState('');
   const [newWineName, setNewWineName] = useState('');
   const [newVintage, setNewVintage] = useState('');
 
-  const matches = wines
-    .filter(wine => searchText && Object.values(wine).join(' ').toLowerCase().includes(searchText.toLowerCase()))
-    .slice(0, 10);
+  useEffect(() => {
+    setTimeout(() => fileInputRef.current?.click(), 250);
+  }, []);
+
+  const matches = wines.filter(wine => searchText && Object.values(wine).join(' ').toLowerCase().includes(searchText.toLowerCase())).slice(0, 10);
 
   function handleLocalPhoto(event) {
     const file = event.target.files?.[0];
@@ -242,20 +194,18 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
       <button className="back" onClick={onBack}><ChevronLeft /> Back</button>
       <section className="detail">
         <Camera size={44} />
-        <h1>Photo / scan bottle</h1>
-        <p>Take a photo first, then match it to an existing wine or add it as new.</p>
-
-        <input className="biginput" type="file" accept="image/*" capture="environment" onChange={handleLocalPhoto} />
+        <h1>Scan Bottle</h1>
+        <p>The camera should open automatically. Take a photo, then match or add the wine.</p>
+        <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleLocalPhoto} style={{ display: 'none' }} />
+        <button className="photo-button" onClick={() => fileInputRef.current?.click()}><Camera /> Take Photo</button>
         {photoUrl && <img className="wine-photo" src={photoUrl} alt="Bottle preview" />}
-
         <h2>Find existing wine</h2>
         <input className="biginput" value={searchText} onChange={event => setSearchText(event.target.value)} placeholder="Try: Meerlust Rubicon 2021" />
         {matches.map(wine => <WineCard key={wine.id} wine={wine} onClick={() => onOpen(wine)} />)}
-
         <h2>Add new wine</h2>
         <input className="biginput" value={newVintage} onChange={event => setNewVintage(event.target.value)} placeholder="Vintage e.g. 2021 or NV" />
         <input className="biginput" value={newWineName} onChange={event => setNewWineName(event.target.value)} placeholder="Wine name" />
-        <button onClick={() => onCreateWine({ wineName: newWineName, vintage: newVintage, photoUrl: '' })}><Plus /> Create new wine</button>
+        <button onClick={() => onCreateWine({ wineName: newWineName, vintage: newVintage })}><Plus /> Create new wine</button>
       </section>
     </main>
   );
