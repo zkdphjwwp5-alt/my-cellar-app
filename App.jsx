@@ -6,7 +6,7 @@ import PhotoUploader from './PhotoUploader.jsx';
 import './style.css';
 
 function clean(value) {
-  return String(value ?? '').replace(/^\uFEFF/, '').trim();
+  return String(value ?? '').trim();
 }
 
 function wineFromDatabase(row) {
@@ -56,7 +56,6 @@ function App() {
       .order('wine_name', { ascending: true });
 
     if (error) {
-      console.error('Supabase load error:', error);
       setLoadError('Unable to connect to the cellar database.');
       setWines([]);
       setLoading(false);
@@ -96,7 +95,6 @@ function App() {
       .eq('id', id);
 
     if (error) {
-      console.error('Supabase quantity update error:', error);
       setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: previousQuantity } : wine));
       setSelected(current => current?.id === id ? { ...current, quantity: previousQuantity } : current);
       setLoadError('The bottle count could not be saved. Please try again.');
@@ -108,8 +106,32 @@ function App() {
     setSelected(current => current?.id === id ? { ...current, photoUrl } : current);
   }
 
+  async function createWineFromScan({ wineName, vintage, photoUrl }) {
+    const { data, error } = await supabase
+      .from('wines')
+      .insert({
+        wine_name: wineName || 'New wine',
+        vintage: vintage || '',
+        quantity: 1,
+        photo_url: photoUrl || null
+      })
+      .select('*')
+      .single();
+
+    if (error) {
+      setLoadError('The new wine could not be saved.');
+      return null;
+    }
+
+    const newWine = wineFromDatabase(data);
+    setWines(current => [newWine, ...current]);
+    setSelected(newWine);
+    setScan(false);
+    return newWine;
+  }
+
   if (selected) return <WineDetail wine={selected} onBack={() => setSelected(null)} onChangeQuantity={changeQuantity} onPhotoSaved={updateWinePhoto} />;
-  if (scan) return <ScanPrototype wines={wines} onBack={() => setScan(false)} onOpen={setSelected} />;
+  if (scan) return <CameraFirstFlow wines={wines} onBack={() => setScan(false)} onOpen={setSelected} onCreateWine={createWineFromScan} />;
 
   return (
     <main>
@@ -140,8 +162,8 @@ function App() {
       </section>
 
       <section className="actions">
-        <button onClick={() => setScan(true)}><Camera /> Scan bottle</button>
-        <button><Plus /> Add wine</button>
+        <button onClick={() => setScan(true)}><Camera /> Photo / scan bottle</button>
+        <button onClick={() => setScan(true)}><Plus /> Add from photo</button>
       </section>
 
       <label className="search">
@@ -185,7 +207,7 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
 
         <div className="qty">{wine.quantity}<span>bottles</span></div>
         <div className="actions">
-          <button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Drink one</button>
+          <button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Consume one</button>
           <button onClick={() => onChangeQuantity(wine.id, 1)}><Plus /> Add one</button>
         </div>
         <dl>
@@ -199,22 +221,41 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
   );
 }
 
-function ScanPrototype({ wines, onBack, onOpen }) {
-  const [text, setText] = useState('');
+function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
+  const [photoUrl, setPhotoUrl] = useState('');
+  const [searchText, setSearchText] = useState('');
+  const [newWineName, setNewWineName] = useState('');
+  const [newVintage, setNewVintage] = useState('');
+
   const matches = wines
-    .filter(wine => text && Object.values(wine).join(' ').toLowerCase().includes(text.toLowerCase()))
+    .filter(wine => searchText && Object.values(wine).join(' ').toLowerCase().includes(searchText.toLowerCase()))
     .slice(0, 10);
+
+  function handleLocalPhoto(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setPhotoUrl(URL.createObjectURL(file));
+  }
 
   return (
     <main>
       <button className="back" onClick={onBack}><ChevronLeft /> Back</button>
       <section className="detail">
         <Camera size={44} />
-        <h1>Scan bottle prototype</h1>
-        <p>For v0.3, type label text. A later release will replace this with camera OCR.</p>
-        <input className="biginput" value={text} onChange={event => setText(event.target.value)} placeholder="Try: Meerlust Rubicon 2021" autoFocus />
-        {text && matches.length === 0 && <p>No match yet. Try producer, vintage, or region.</p>}
+        <h1>Photo / scan bottle</h1>
+        <p>Take a photo first, then match it to an existing wine or add it as new.</p>
+
+        <input className="biginput" type="file" accept="image/*" capture="environment" onChange={handleLocalPhoto} />
+        {photoUrl && <img className="wine-photo" src={photoUrl} alt="Bottle preview" />}
+
+        <h2>Find existing wine</h2>
+        <input className="biginput" value={searchText} onChange={event => setSearchText(event.target.value)} placeholder="Try: Meerlust Rubicon 2021" />
         {matches.map(wine => <WineCard key={wine.id} wine={wine} onClick={() => onOpen(wine)} />)}
+
+        <h2>Add new wine</h2>
+        <input className="biginput" value={newVintage} onChange={event => setNewVintage(event.target.value)} placeholder="Vintage e.g. 2021 or NV" />
+        <input className="biginput" value={newWineName} onChange={event => setNewWineName(event.target.value)} placeholder="Wine name" />
+        <button onClick={() => onCreateWine({ wineName: newWineName, vintage: newVintage, photoUrl: '' })}><Plus /> Create new wine</button>
       </section>
     </main>
   );
