@@ -1,21 +1,17 @@
-# My Cellar v0.2 — Supabase Live Database
+# My Cellar v0.3 — Bottle Photo Upload
 
-Replace/upload:
+## Files changed
 - App.jsx
-- supabase.js
-- package.json
-
-Do not replace:
-- index.html
+- PhotoUploader.jsx
 - style.css
-- README.md
-- cellartracker_seed_inventory.csv
 
-Expected result:
-- Home screen says `205 wines loaded from Supabase`
-- Bottle count shows `855 bottles`
-- Search works
-- Wine detail screen opens
-- Add one / Drink one saves back to Supabase
+## Supabase setup
+Run `supabase-storage-setup.sql` in Supabase SQL Editor before testing photo uploads.
 
-This release is built for the current repository structure where App.jsx sits in the root and index.html loads `/App.jsx`.
+## Acceptance test
+- Open a wine detail page
+- Tap Upload photo
+- Take/select a bottle photo
+- Photo uploads to Supabase Storage
+- `wines.photo_url` updates
+- Photo appears immediately on the detail page

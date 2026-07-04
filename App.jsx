@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Camera, Search, Wine, Plus, Minus, ChevronLeft, AlertCircle, RefreshCw } from 'lucide-react';
 import { supabase } from './supabase.js';
+import PhotoUploader from './PhotoUploader.jsx';
 import './style.css';
 
 function clean(value) {
@@ -102,7 +103,12 @@ function App() {
     }
   }
 
-  if (selected) return <WineDetail wine={selected} onBack={() => setSelected(null)} onChangeQuantity={changeQuantity} />;
+  function updateWinePhoto(id, photoUrl) {
+    setWines(current => current.map(wine => wine.id === id ? { ...wine, photoUrl } : wine));
+    setSelected(current => current?.id === id ? { ...current, photoUrl } : current);
+  }
+
+  if (selected) return <WineDetail wine={selected} onBack={() => setSelected(null)} onChangeQuantity={changeQuantity} onPhotoSaved={updateWinePhoto} />;
   if (scan) return <ScanPrototype wines={wines} onBack={() => setScan(false)} onOpen={setSelected} />;
 
   return (
@@ -165,7 +171,7 @@ function WineCard({ wine, onClick }) {
   );
 }
 
-function WineDetail({ wine, onBack, onChangeQuantity }) {
+function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
   return (
     <main>
       <button className="back" onClick={onBack}><ChevronLeft /> Back</button>
@@ -174,6 +180,9 @@ function WineDetail({ wine, onBack, onChangeQuantity }) {
         <h1>{[wine.vintage, wine.producer || wine.fullName].filter(Boolean).join(' ')}</h1>
         {wine.producer && <h2>{wine.name}</h2>}
         <p>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</p>
+
+        <PhotoUploader wine={wine} onPhotoSaved={onPhotoSaved} />
+
         <div className="qty">{wine.quantity}<span>bottles</span></div>
         <div className="actions">
           <button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Drink one</button>
@@ -202,7 +211,7 @@ function ScanPrototype({ wines, onBack, onOpen }) {
       <section className="detail">
         <Camera size={44} />
         <h1>Scan bottle prototype</h1>
-        <p>For v0.2, type label text. A later release will replace this with camera OCR.</p>
+        <p>For v0.3, type label text. A later release will replace this with camera OCR.</p>
         <input className="biginput" value={text} onChange={event => setText(event.target.value)} placeholder="Try: Meerlust Rubicon 2021" autoFocus />
         {text && matches.length === 0 && <p>No match yet. Try producer, vintage, or region.</p>}
         {matches.map(wine => <WineCard key={wine.id} wine={wine} onClick={() => onOpen(wine)} />)}
