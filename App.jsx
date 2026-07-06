@@ -132,17 +132,22 @@ function App() {
     }
 
     let savedRow = data;
-    const photoUrl = await uploadScannedPhoto(photoFile, data.id);
 
-    if (photoUrl) {
-      const { data: updatedData } = await supabase
-        .from('wines')
-        .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
-        .eq('id', data.id)
-        .select('*')
-        .single();
+    if (photoFile) {
+      const photoUrl = await uploadScannedPhoto(photoFile, data.id);
 
-      if (updatedData) savedRow = updatedData;
+      if (photoUrl) {
+        const { data: updatedData, error: updatePhotoError } = await supabase
+          .from('wines')
+          .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
+          .eq('id', data.id)
+          .select('*')
+          .single();
+
+        if (!updatePhotoError && updatedData) {
+          savedRow = updatedData;
+        }
+      }
     }
 
     const newWine = wineFromDatabase(savedRow);
