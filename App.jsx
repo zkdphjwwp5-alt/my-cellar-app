@@ -5,6 +5,8 @@ import { supabase } from './supabase.js';
 import PhotoUploader from './PhotoUploader.jsx';
 import './style.css';
 
+const BUCKET_NAME = 'wine-photos';
+
 function clean(value) {
   return String(value ?? '').trim();
 }
@@ -48,6 +50,19 @@ function bestMatch(wines, extracted) {
   return scored[0]?.score >= 2 ? scored[0].wine : null;
 }
 
+async function uploadScannedPhoto(file, wineId) {
+  if (!file || !wineId) return '';
+  const fileExtension = file.name.split('.').pop() || 'jpg';
+  const filePath = `${wineId}/${Date.now()}.${fileExtension}`;
+  const { error } = await supabase.storage.from(BUCKET_NAME).upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: true
+  });
+  if (error) return '';
+  const { data } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath);
+  return data?.publicUrl || '';
+}
+
 function App() {
   const [wines, setWines] = useState([]);
   const [query, setQuery] = useState('');
@@ -84,17 +99,13 @@ function App() {
   async function changeQuantity(id, delta) {
     const currentWine = wines.find(wine => wine.id === id);
     if (!currentWine) return;
-
     const previousQuantity = currentWine.quantity;
     const nextQuantity = Math.max(0, previousQuantity + delta);
 
     setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: nextQuantity } : wine));
     setSelected(current => current?.id === id ? { ...current, quantity: nextQuantity } : current);
 
-    const { error } = await supabase
-      .from('wines')
-      .update({ quantity: nextQuantity, updated_at: new Date().toISOString() })
-      .eq('id', id);
+    const { error } = await supabase.from('wines').update({ quantity: nextQuantity, updated_at: new Date().toISOString() }).eq('id', id);
 
     if (error) {
       setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: previousQuantity } : wine));
@@ -108,15 +119,10 @@ function App() {
     setSelected(current => current?.id === id ? { ...current, photoUrl } : current);
   }
 
-  async function createWineFromScan({ producer, wineName, vintage }) {
+  async function createWineFromScan({ producer, wineName, vintage, photoFile }) {
     const { data, error } = await supabase
       .from('wines')
-      .insert({
-        producer: producer || '',
-        wine_name: wineName || 'New wine',
-        vintage: vintage || '',
-        quantity: 1
-      })
+      .insert({ producer: producer || '', wine_name: wineName || 'New wine', vintage: vintage || '', quantity: 1 })
       .select('*')
       .single();
 
@@ -125,7 +131,21 @@ function App() {
       return null;
     }
 
-    const newWine = wineFromDatabase(data);
+    let savedRow = data;
+    const photoUrl = await uploadScannedPhoto(photoFile, data.id);
+
+    if (photoUrl) {
+      const { data: updatedData } = await supabase
+        .from('wines')
+        .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
+        .eq('id', data.id)
+        .select('*')
+        .single();
+
+      if (updatedData) savedRow = updatedData;
+    }
+
+    const newWine = wineFromDatabase(savedRow);
     setWines(current => [newWine, ...current]);
     setSelected(newWine);
     setScan(false);
@@ -224,6 +244,7 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
 function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
   const fileInputRef = useRef(null);
   const [photoUrl, setPhotoUrl] = useState('');
+  const [photoFile, setPhotoFile] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [newWineName, setNewWineName] = useState('');
   const [newProducer, setNewProducer] = useState('');
@@ -240,6 +261,7 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
   async function handleLocalPhoto(event) {
     const file = event.target.files?.[0];
     if (!file) return;
+    setPhotoFile(file);
     setPhotoUrl(URL.createObjectURL(file));
     await recogniseLabel(file);
   }
@@ -315,7 +337,9 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
         <input className="biginput" value={newVintage} onChange={event => setNewVintage(event.target.value)} placeholder="Vintage e.g. 2021 or NV" />
         <input className="biginput" value={newProducer} onChange={event => setNewProducer(event.target.value)} placeholder="Producer" />
         <input className="biginput" value={newWineName} onChange={event => setNewWineName(event.target.value)} placeholder="Wine name" />
-        <button onClick={() => onCreateWine({ producer: newProducer, wineName: newWineName, vintage: newVintage })}><Plus /> Create new wine</button>
+        <button onClick={() => onCreateWine({ producer: newProducer, wineName: newWineName, vintage: newVintage, photoFile })}>
+          <Plus /> Create new wine
+        </button>
       </section>
     </main>
   );
