@@ -84,13 +84,18 @@ function App() {
   async function changeQuantity(id, delta) {
     const currentWine = wines.find(wine => wine.id === id);
     if (!currentWine) return;
+
     const previousQuantity = currentWine.quantity;
     const nextQuantity = Math.max(0, previousQuantity + delta);
 
     setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: nextQuantity } : wine));
     setSelected(current => current?.id === id ? { ...current, quantity: nextQuantity } : current);
 
-    const { error } = await supabase.from('wines').update({ quantity: nextQuantity, updated_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase
+      .from('wines')
+      .update({ quantity: nextQuantity, updated_at: new Date().toISOString() })
+      .eq('id', id);
+
     if (error) {
       setWines(current => current.map(wine => wine.id === id ? { ...wine, quantity: previousQuantity } : wine));
       setSelected(current => current?.id === id ? { ...current, quantity: previousQuantity } : current);
@@ -103,14 +108,17 @@ function App() {
     setSelected(current => current?.id === id ? { ...current, photoUrl } : current);
   }
 
-  async function createWineFromScan({ producer, wineName, vintage, photoUrl }) {
-    const { data, error } = await supabase.from('wines').insert({
-      producer: producer || '',
-      wine_name: wineName || 'New wine',
-      vintage: vintage || '',
-      quantity: 1,
-      photo_url: photoUrl || null
-    }).select('*').single();
+  async function createWineFromScan({ producer, wineName, vintage }) {
+    const { data, error } = await supabase
+      .from('wines')
+      .insert({
+        producer: producer || '',
+        wine_name: wineName || 'New wine',
+        vintage: vintage || '',
+        quantity: 1
+      })
+      .select('*')
+      .single();
 
     if (error) {
       setLoadError('The new wine could not be saved.');
@@ -138,7 +146,16 @@ function App() {
         <Wine size={50} />
       </header>
 
-      {loadError && <section className="error"><AlertCircle /><div><strong>Database issue</strong><p>{loadError}</p><button onClick={loadWines}><RefreshCw /> Try again</button></div></section>}
+      {loadError && (
+        <section className="error">
+          <AlertCircle />
+          <div>
+            <strong>Database issue</strong>
+            <p>{loadError}</p>
+            <button onClick={loadWines}><RefreshCw /> Try again</button>
+          </div>
+        </section>
+      )}
 
       <section className="stats">
         <div><strong>{wines.length}</strong><span>wines</span></div>
@@ -151,7 +168,10 @@ function App() {
         <button onClick={() => setScan(true)}><Plus /> Add from Photo</button>
       </section>
 
-      <label className="search"><Search /><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search producer, vintage, region…" /></label>
+      <label className="search">
+        <Search />
+        <input value={query} onChange={event => setQuery(event.target.value)} placeholder="Search producer, vintage, region…" />
+      </label>
 
       <section className="list">
         {loading && <div className="card"><div><strong>Loading wines…</strong><small>Reading from Supabase</small></div></div>}
@@ -163,7 +183,16 @@ function App() {
 }
 
 function WineCard({ wine, onClick }) {
-  return <button className="card" onClick={onClick}><div><strong>{[wine.vintage, wine.producer || wine.fullName].filter(Boolean).join(' ')}</strong><span>{wine.producer ? wine.name : ''}</span><small>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</small></div><b>{wine.quantity}</b></button>;
+  return (
+    <button className="card" onClick={onClick}>
+      <div>
+        <strong>{[wine.vintage, wine.producer || wine.fullName].filter(Boolean).join(' ')}</strong>
+        <span>{wine.producer ? wine.name : ''}</span>
+        <small>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</small>
+      </div>
+      <b>{wine.quantity}</b>
+    </button>
+  );
 }
 
 function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
@@ -177,7 +206,10 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
         <p>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</p>
         <PhotoUploader wine={wine} onPhotoSaved={onPhotoSaved} />
         <div className="qty">{wine.quantity}<span>bottles</span></div>
-        <div className="actions"><button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Consume one</button><button onClick={() => onChangeQuantity(wine.id, 1)}><Plus /> Add one</button></div>
+        <div className="actions">
+          <button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Consume one</button>
+          <button onClick={() => onChangeQuantity(wine.id, 1)}><Plus /> Add one</button>
+        </div>
         <dl>
           <dt>Bottle size</dt><dd>{wine.size}</dd>
           <dt>Cellar location</dt><dd>{wine.storageLocation}</dd>
@@ -192,7 +224,6 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
 function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
   const fileInputRef = useRef(null);
   const [photoUrl, setPhotoUrl] = useState('');
-  const [photoFile, setPhotoFile] = useState(null);
   const [searchText, setSearchText] = useState('');
   const [newWineName, setNewWineName] = useState('');
   const [newProducer, setNewProducer] = useState('');
@@ -200,16 +231,15 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
   const [recognising, setRecognising] = useState(false);
   const [recognitionMessage, setRecognitionMessage] = useState('');
 
-  useEffect(() => {
-    setTimeout(() => fileInputRef.current?.click(), 250);
-  }, []);
+  useEffect(() => { setTimeout(() => fileInputRef.current?.click(), 250); }, []);
 
-  const matches = wines.filter(wine => searchText && Object.values(wine).join(' ').toLowerCase().includes(searchText.toLowerCase())).slice(0, 10);
+  const matches = wines
+    .filter(wine => searchText && Object.values(wine).join(' ').toLowerCase().includes(searchText.toLowerCase()))
+    .slice(0, 10);
 
   async function handleLocalPhoto(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    setPhotoFile(file);
     setPhotoUrl(URL.createObjectURL(file));
     await recogniseLabel(file);
   }
@@ -219,31 +249,42 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
     setRecognitionMessage('Reading label…');
 
     const reader = new FileReader();
+
     reader.onloadend = async () => {
-      const base64Image = String(reader.result || '');
-      const { data, error } = await supabase.functions.invoke('analyze-wine-label', {
-        body: { image: base64Image }
-      });
+      try {
+        const response = await fetch('/api/analyze-wine-label', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image: String(reader.result || '') })
+        });
 
-      if (error || !data) {
+        const extracted = await response.json();
+
+        if (!response.ok) {
+          throw new Error(extracted.error || 'Recognition failed');
+        }
+
+        setNewProducer(clean(extracted.producer));
+        setNewWineName(clean(extracted.wine_name));
+        setNewVintage(clean(extracted.vintage));
+
+        const combined = [extracted.vintage, extracted.producer, extracted.wine_name]
+          .map(clean)
+          .filter(Boolean)
+          .join(' ');
+
+        setSearchText(combined);
+
+        const match = bestMatch(wines, extracted);
+
+        if (match) {
+          setRecognitionMessage('Match found. Opening wine…');
+          setTimeout(() => onOpen(match), 500);
+        } else {
+          setRecognitionMessage('No clear match found. Details have been pre-filled.');
+        }
+      } catch (error) {
         setRecognitionMessage('Could not read the label yet. You can search or add manually.');
-        setRecognising(false);
-        return;
-      }
-
-      const extracted = data;
-      setNewProducer(clean(extracted.producer));
-      setNewWineName(clean(extracted.wine_name));
-      setNewVintage(clean(extracted.vintage));
-      const combined = [extracted.vintage, extracted.producer, extracted.wine_name].map(clean).filter(Boolean).join(' ');
-      setSearchText(combined);
-
-      const match = bestMatch(wines, extracted);
-      if (match) {
-        setRecognitionMessage('Match found. Opening wine…');
-        setTimeout(() => onOpen(match), 500);
-      } else {
-        setRecognitionMessage('No clear match found. Details have been pre-filled.');
       }
 
       setRecognising(false);
@@ -259,7 +300,9 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
         <Camera size={44} />
         <h1>Scan Bottle</h1>
         <p>Take a photo. The app will try to recognise the wine automatically.</p>
+
         <input ref={fileInputRef} type="file" accept="image/*" capture="environment" onChange={handleLocalPhoto} style={{ display: 'none' }} />
+
         <button className="photo-button" onClick={() => fileInputRef.current?.click()}><Camera /> Take Photo</button>
         {photoUrl && <img className="wine-photo" src={photoUrl} alt="Bottle preview" />}
         {recognitionMessage && <p className="photo-message">{recognising ? '⏳ ' : ''}{recognitionMessage}</p>}
