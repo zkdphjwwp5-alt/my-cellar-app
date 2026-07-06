@@ -132,22 +132,17 @@ function App() {
     }
 
     let savedRow = data;
+    const photoUrl = await uploadScannedPhoto(photoFile, data.id);
 
-    if (photoFile) {
-      const photoUrl = await uploadScannedPhoto(photoFile, data.id);
+    if (photoUrl) {
+      const { data: updatedData } = await supabase
+        .from('wines')
+        .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
+        .eq('id', data.id)
+        .select('*')
+        .single();
 
-      if (photoUrl) {
-        const { data: updatedData, error: updatePhotoError } = await supabase
-          .from('wines')
-          .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
-          .eq('id', data.id)
-          .select('*')
-          .single();
-
-        if (!updatePhotoError && updatedData) {
-          savedRow = updatedData;
-        }
-      }
+      if (updatedData) savedRow = updatedData;
     }
 
     const newWine = wineFromDatabase(savedRow);
@@ -158,7 +153,7 @@ function App() {
   }
 
   if (selected) return <WineDetail wine={selected} onBack={() => setSelected(null)} onChangeQuantity={changeQuantity} onPhotoSaved={updateWinePhoto} />;
-  if (scan) return <CameraFirstFlow wines={wines} onBack={() => setScan(false)} onOpen={setSelected} onCreateWine={createWineFromScan} />;
+  if (scan) return <CameraFirstFlow wines={wines} onBack={() => setScan(false)} onOpen={setSelected} onCreateWine={createWineFromScan} onExistingWinePhotoSaved={updateWinePhoto} />;
 
   return (
     <main>
@@ -246,7 +241,7 @@ function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
   );
 }
 
-function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
+function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine, onExistingWinePhotoSaved }) {
   const fileInputRef = useRef(null);
   const [photoUrl, setPhotoUrl] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
@@ -306,6 +301,27 @@ function CameraFirstFlow({ wines, onBack, onOpen, onCreateWine }) {
 
         if (match) {
           setRecognitionMessage('Match found. Opening wine…');
+
+          if (!match.photoUrl && file) {
+            const photoUrl = await uploadScannedPhoto(file, match.id);
+
+            if (photoUrl) {
+              const { data: updatedData } = await supabase
+                .from('wines')
+                .update({ photo_url: photoUrl, updated_at: new Date().toISOString() })
+                .eq('id', match.id)
+                .select('*')
+                .single();
+
+              if (updatedData) {
+                const updatedWine = wineFromDatabase(updatedData);
+                onExistingWinePhotoSaved(match.id, photoUrl);
+                setTimeout(() => onOpen(updatedWine), 500);
+                return;
+              }
+            }
+          }
+
           setTimeout(() => onOpen(match), 500);
         } else {
           setRecognitionMessage('No clear match found. Details have been pre-filled.');
