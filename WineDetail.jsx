@@ -2,22 +2,28 @@ import React from 'react';
 import { ChevronLeft, Minus, Plus } from 'lucide-react';
 import PhotoUploader from './PhotoUploader.jsx';
 
-export default function WineDetail({ wine, onBack, onChangeQuantity, onPhotoSaved }) {
+export default function WineDetail({ wine, onBack, onAddOne, onConsumeOne, onPhotoSaved, savePhotoForWine }) {
+  async function handlePhotoSaved(id, photoUrl) {
+    onPhotoSaved({ ...wine, photoUrl });
+  }
+
   return (
     <main>
       <button className="back" onClick={onBack}><ChevronLeft /> Back</button>
+
       <section className="detail">
         <p className="eyebrow">{wine.category || wine.colour || 'Wine'}</p>
         <h1>{[wine.vintage, wine.producer || wine.fullName].filter(Boolean).join(' ')}</h1>
         {wine.producer && <h2>{wine.name}</h2>}
         <p>{[wine.colour, wine.country, wine.region, wine.subregion, wine.appellation].filter(Boolean).join(' · ')}</p>
 
-        <PhotoUploader wine={wine} onPhotoSaved={onPhotoSaved} />
+        <PhotoUploader wine={wine} onPhotoSaved={handlePhotoSaved} />
 
         <div className="qty">{wine.quantity}<span>bottles</span></div>
+
         <div className="actions">
-          <button onClick={() => onChangeQuantity(wine.id, -1)}><Minus /> Consume one</button>
-          <button onClick={() => onChangeQuantity(wine.id, 1)}><Plus /> Add one</button>
+          <button onClick={onConsumeOne}><Minus /> Consume one</button>
+          <button onClick={onAddOne}><Plus /> Add one</button>
         </div>
 
         <dl>

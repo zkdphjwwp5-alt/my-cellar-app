@@ -1,10 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Camera, Search, Wine, Plus, AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, Camera, Plus, RefreshCw, Search, Wine } from 'lucide-react';
 import WineCard from './WineCard.jsx';
-
-function clean(value) {
-  return String(value ?? '').trim();
-}
+import { clean } from './App.jsx';
 
 export default function Home({ wines, loading, loadError, onRetry, onOpenWine, onScan }) {
   const [query, setQuery] = useState('');
